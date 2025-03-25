@@ -154,6 +154,19 @@
             }
         });
 
+        // Add mousePosition to track current mouse coordinates
+        const mousePosition = {
+            x: 0,
+            y: 0
+        };
+
+        // Add mouse move event listener after other event listeners
+        document.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mousePosition.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            mousePosition.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+        });
+
         function shoot(e) {
             if (player.size <= 8) return;
             
@@ -423,12 +436,23 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw player
+            // Draw player with direction indicator
             ctx.beginPath();
             ctx.fillStyle = 'blue';
             ctx.arc(player.x, player.y, player.size/2, 0, Math.PI * 2);
             ctx.fill();
-            ctx.closePath();
+            
+            // Player direction indicator with scaled width
+            const angle = Math.atan2(mousePosition.y - player.y, mousePosition.x - player.x);
+            ctx.beginPath();
+            ctx.strokeStyle = 'darkblue';
+            ctx.lineWidth = Math.max(2, player.size / 8); // Scale line width with player size
+            ctx.moveTo(player.x, player.y);
+            ctx.lineTo(
+                player.x + Math.cos(angle) * (player.size/2),
+                player.y + Math.sin(angle) * (player.size/2)
+            );
+            ctx.stroke();
 
             // Draw projectiles
             ctx.fillStyle = 'cyan';
