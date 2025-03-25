@@ -57,6 +57,15 @@
     </style>
 </head>
 <body>
+    <div id="usernameModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 1000;">
+        <div style="background: white; padding: 20px; border-radius: 10px; text-align: center;">
+            <h2 style="color: black; margin-bottom: 20px;">Enter Your Username</h2>
+            <input type="text" id="usernameInput" style="padding: 10px; font-size: 16px; margin-bottom: 10px; width: 200px;" maxlength="15">
+            <br>
+            <button onclick="startGame()" style="padding: 10px 20px; font-size: 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Start Game</button>
+        </div>
+    </div>
+
     <header>
         <h1>Circle Shooter</h1>
     </header>
@@ -97,6 +106,9 @@
         let countdown = 3;
         let lastCountdownTime = 0;
         let highScore = parseInt(localStorage.getItem('highScore')) || 0;
+        let username = '';
+        let leaderboard = JSON.parse(localStorage.getItem('leaderboard')) || [];
+        let sessionHighScore = 0;
 
         // Player
         const player = {
@@ -206,23 +218,50 @@
             return distance < (obj1.size + obj2.size) / 2;
         }
 
+        function startGame() {
+            const input = document.getElementById('usernameInput');
+            if (input.value.trim() === '') {
+                alert('Please enter a username!');
+                return;
+            }
+            username = input.value.trim();
+            document.getElementById('usernameModal').style.display = 'none';
+            resetGame();
+        }
+
         function update() {
             if (gameOver) {
-                // Update high score if current score is higher
-                if (score > highScore) {
-                    highScore = score;
-                    localStorage.setItem('highScore', highScore);
+                // Update session high score
+                if (score > sessionHighScore) {
+                    sessionHighScore = score;
                 }
+
+                // Update leaderboard
+                leaderboard.push({ username: username, score: score });
+                leaderboard.sort((a, b) => b.score - a.score);
+                leaderboard = leaderboard.slice(0, 3); // Keep only top 3
+                localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
 
                 ctx.fillStyle = 'red';
                 ctx.font = '48px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('Game Over! Score: ' + score, canvas.width/2, canvas.height/2);
+                ctx.fillText('Game Over! Score: ' + score, canvas.width/2, canvas.height/2 - 50);
                 
-                // Add high score to game over screen
+                // Show session high score
                 ctx.font = '24px Arial';
-                ctx.fillText('High Score: ' + highScore, canvas.width/2, canvas.height/2 - 50);
-                ctx.fillText('Click anywhere to restart', canvas.width/2, canvas.height/2 + 50);
+                ctx.fillText('Session High Score: ' + sessionHighScore, canvas.width/2, canvas.height/2);
+                
+                // Show leaderboard
+                ctx.fillText('All-Time Best Scores:', canvas.width/2, canvas.height/2 + 50);
+                leaderboard.forEach((entry, index) => {
+                    ctx.fillText(
+                        `${index + 1}. ${entry.username}: ${entry.score}`, 
+                        canvas.width/2, 
+                        canvas.height/2 + 90 + (index * 30)
+                    );
+                });
+
+                ctx.fillText('Click anywhere to restart', canvas.width/2, canvas.height/2 + 180);
                 ctx.textAlign = 'left';
                 return;
             }
@@ -381,9 +420,9 @@
             ctx.textAlign = 'left';
             ctx.fillText('Score: ' + score, 10, 30);
             
-            // Add high score
+            // Show session high score instead of all-time high score
             ctx.textAlign = 'right';
-            ctx.fillText('High Score: ' + highScore, canvas.width - 10, 30);
+            ctx.fillText('High Score: ' + sessionHighScore, canvas.width - 10, 30);
             ctx.textAlign = 'left';
         }
 
