@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Square Growth Game</title>
+</head>
+<body style="margin:0; overflow: hidden;">
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas to window size
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Game state
+        let gameOver = false;
+        let score = 0;
+        let gameStarting = true;
+        let countdown = 3;
+        let lastCountdownTime = 0;
+
+        // Player
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            size: 20,  // Starting size
+            speed: 5,
+            projectiles: []
+        };
+
+        // Enemies and drops
+        let enemies = [];
+        let drops = [];
+        
+        // Input handling
+        const keys = {};
+        document.addEventListener('keydown', e => keys[e.key] = true);
+        document.addEventListener('keyup', e => keys[e.key] = false);
+        document.addEventListener('click', (e) => {
+            if (gameOver) {
+                resetGame();
+            } else if (!gameStarting) {
+                shoot(e);
+            }
+        });
+
+        function shoot(e) {
+            // Only shoot if player has enough size
+            if (player.size <= 8) return;
+            
+            const angle = Math.atan2(e.clientY - player.y, e.clientX - player.x);
+            
+            // Scale projectile size based on player size
+            // Base projectile is 4 at player size 20
+            // This creates a proportional scaling
+            const projectileSize = Math.max(4, (player.size / 20) * 4);
+            
+            player.size -= 4;
+            
+            player.projectiles.push({
+                x: player.x,
+                y: player.y,
+                size: projectileSize,
+                dx: Math.cos(angle) * 7,
+                dy: Math.sin(angle) * 7
+            });
+        }
+
+        function spawnEnemy() {
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            
+            switch(side) {
+                case 0: x = 0; y = Math.random() * canvas.height; break;
+                case 1: x = canvas.width; y = Math.random() * canvas.height; break;
+                case 2: x = Math.random() * canvas.width; y = 0; break;
+                case 3: x = Math.random() * canvas.width; y = canvas.height; break;
+            }
+
+            enemies.push({
+                x: x,
+                y: y,
+                size: 20,
+                speed: 3,
+                angle: Math.atan2(player.y - y, player.x - x),
+                turnSpeed: 0.03  // Radians per frame
+            });
+        }
+
+        function resetGame() {
+            gameOver = false;
+            gameStarting = true;
+            countdown = 3;
+            lastCountdownTime = Date.now();
+            score = 0;
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            player.size = 20;  // Reset to starting size
+            player.projectiles = [];
+            enemies = [];
+            drops = [];
+            requestAnimationFrame(update);
+        }
+
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameOver) {
+                ctx.fillStyle = 'red';
+                ctx.font = '48px Arial';
+                ctx.fillText('Game Over! Score: ' + score, canvas.width/2 - 150, canvas.height/2);
+                ctx.font = '24px Arial';
+                ctx.fillText('Click anywhere to restart', canvas.width/2 - 100, canvas.height/2 + 50);
+                return;
+            }
+
+            if (gameStarting) {
+                const currentTime = Date.now();
+                if (currentTime - lastCountdownTime >= 1000) {
+                    countdown--;
+                    lastCountdownTime = currentTime;
+                }
+
+                ctx.fillStyle = 'black';
+                ctx.font = '72px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(countdown > 0 ? countdown : 'GO!', canvas.width/2, canvas.height/2);
+                ctx.textAlign = 'left';  // Reset text align
+
+                if (countdown < 0) {
+                    gameStarting = false;
+                }
+                requestAnimationFrame(update);
+                return;
+            }
+
+            // Check for no-ammo game over condition
+            if (player.size <= 8 && drops.length === 0 && player.projectiles.length === 0) {
+                gameOver = true;
+                ctx.fillStyle = 'red';
+                ctx.font = '48px Arial';
+                ctx.fillText('Out of Ammo! Score: ' + score, canvas.width/2 - 150, canvas.height/2);
+                return;
+            }
+
+            // Player movement
+            if (keys['w'] || keys['W']) player.y -= player.speed;
+            if (keys['s'] || keys['S']) player.y += player.speed;
+            if (keys['a'] || keys['A']) player.x -= player.speed;
+            if (keys['d'] || keys['D']) player.x += player.speed;
+
+            // Keep player in bounds
+            player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+            player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+
+            // Update projectiles
+            player.projectiles.forEach((proj, i) => {
+                proj.x += proj.dx;
+                proj.y += proj.dy;
+                
+                // Remove off-screen projectiles
+                if (proj.x < 0 || proj.x > canvas.width || proj.y < 0 || proj.y > canvas.height) {
+                    player.projectiles.splice(i, 1);
+                }
+            });
+
+            // Update enemies
+            enemies.forEach((enemy, i) => {
+                // Calculate desired angle to player
+                const targetAngle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                
+                // Find shortest angle difference
+                let angleDiff = targetAngle - enemy.angle;
+                if (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                
+                // Turn towards player with limited turn speed
+                if (Math.abs(angleDiff) > enemy.turnSpeed) {
+                    enemy.angle += Math.sign(angleDiff) * enemy.turnSpeed;
+                } else {
+                    enemy.angle = targetAngle;
+                }
+                
+                // Move in current facing direction
+                enemy.x += Math.cos(enemy.angle) * enemy.speed;
+                enemy.y += Math.sin(enemy.angle) * enemy.speed;
+
+                // Check collision with player
+                if (checkCollision(player, enemy)) {
+                    gameOver = true;
+                }
+
+                // Check collision with projectiles
+                player.projectiles.forEach((proj, j) => {
+                    if (checkCollision(proj, enemy)) {
+                        // Create drops
+                        drops.push({
+                            x: enemy.x,
+                            y: enemy.y,
+                            size: enemy.size / 2
+                        });
+                        
+                        enemies.splice(i, 1);
+                        player.projectiles.splice(j, 1);
+                        score++;
+                    }
+                });
+            });
+
+            // Check for drop collection
+            drops.forEach((drop, i) => {
+                if (checkCollision(player, drop)) {
+                    player.size += 12;  // Grow by 12
+                    drops.splice(i, 1);
+                }
+            });
+
+            // Spawn enemies periodically
+            if (Math.random() < 0.02) spawnEnemy();
+
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function checkCollision(obj1, obj2) {
+            const dx = obj1.x - obj2.x;
+            const dy = obj1.y - obj2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance < (obj1.size + obj2.size) / 2;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw player
+            ctx.beginPath();
+            ctx.fillStyle = 'blue';
+            ctx.arc(player.x, player.y, player.size/2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.closePath();
+
+            // Draw projectiles
+            ctx.fillStyle = 'cyan';
+            player.projectiles.forEach(proj => {
+                ctx.beginPath();
+                ctx.arc(proj.x, proj.y, proj.size/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+            });
+
+            // Draw enemies
+            ctx.fillStyle = 'red';
+            enemies.forEach(enemy => {
+                // Enemy body
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.size/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+
+                // Direction indicator
+                ctx.beginPath();
+                ctx.strokeStyle = 'darkred';
+                ctx.lineWidth = 2;
+                ctx.moveTo(enemy.x, enemy.y);
+                ctx.lineTo(
+                    enemy.x + Math.cos(enemy.angle) * (enemy.size/2),
+                    enemy.y + Math.sin(enemy.angle) * (enemy.size/2)
+                );
+                ctx.stroke();
+                ctx.closePath();
+            });
+
+            // Draw drops
+            ctx.fillStyle = 'green';
+            drops.forEach(drop => {
+                ctx.beginPath();
+                ctx.arc(drop.x, drop.y, drop.size/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+            });
+
+            // Draw score
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Arial';
+            ctx.fillText('Score: ' + score, 10, 30);
+        }
+
+        update();
+    </script>
+</body>
+</html> 
