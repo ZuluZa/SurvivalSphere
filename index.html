@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circle Shooter Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1a1a1a;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+
+        header {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #333;
+            border-radius: 10px;
+            max-width: 600px;
+        }
+
+        h1 {
+            color: #4CAF50;
+        }
+
+        .key {
+            background-color: #444;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin: 0 2px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Circle Shooter</h1>
+    </header>
+
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <div class="instructions">
+        <h2>How to Play</h2>
+        <p>
+            <span class="key">W</span>
+            <span class="key">A</span>
+            <span class="key">S</span>
+            <span class="key">D</span> - Move your circle
+        </p>
+        <p><span class="key">Click</span> - Shoot projectiles</p>
+        <p>
+            • Collect green circles to grow larger<br>
+            • Each shot reduces your size<br>
+            • Avoid red enemy circles<br>
+            • Game over if you're too small with no pickups left
+        </p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas to container size
+        canvas.width = 800;
+        canvas.height = 600;
+
+        // Game state
+        let gameOver = false;
+        let score = 0;
+        let gameStarting = true;
+        let countdown = 3;
+        let lastCountdownTime = 0;
+        let highScore = parseInt(localStorage.getItem('highScore')) || 0;
+
+        // Player
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            size: 20,
+            speed: 5,
+            projectiles: []
+        };
+
+        // Enemies and drops
+        let enemies = [];
+        let drops = [];
+        
+        // Input handling
+        const keys = {};
+        document.addEventListener('keydown', e => {
+            // Prevent shift key from being registered
+            if (e.key !== 'Shift') {
+                keys[e.key.toLowerCase()] = true;  // Convert to lowercase
+            }
+        });
+        document.addEventListener('keyup', e => {
+            if (e.key !== 'Shift') {
+                keys[e.key.toLowerCase()] = false;  // Convert to lowercase
+            }
+        });
+        document.addEventListener('click', (e) => {
+            if (gameOver) {
+                resetGame();
+            } else if (!gameStarting) {
+                shoot(e);
+            }
+        });
+
+        function shoot(e) {
+            if (player.size <= 8) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const mouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+            
+            // Calculate angle and distances
+            const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
+            const projectileSize = Math.max(4, (player.size / 20) * 4);
+            
+            // Calculate starting position at edge of player circle
+            const startX = player.x + Math.cos(angle) * (player.size / 2);
+            const startY = player.y + Math.sin(angle) * (player.size / 2);
+            
+            player.size -= 4;
+            
+            player.projectiles.push({
+                x: startX,
+                y: startY,
+                size: projectileSize,
+                dx: Math.cos(angle) * 7,
+                dy: Math.sin(angle) * 7
+            });
+        }
+
+        function spawnEnemy() {
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            
+            switch(side) {
+                case 0: x = 0; y = Math.random() * canvas.height; break;
+                case 1: x = canvas.width; y = Math.random() * canvas.height; break;
+                case 2: x = Math.random() * canvas.width; y = 0; break;
+                case 3: x = Math.random() * canvas.width; y = canvas.height; break;
+            }
+
+            enemies.push({
+                x: x,
+                y: y,
+                size: 20,
+                speed: 3,
+                angle: Math.atan2(player.y - y, player.x - x),
+                turnSpeed: 0.03
+            });
+        }
+
+        function resetGame() {
+            // Clear all key states
+            for (let key in keys) {
+                keys[key] = false;
+            }
+            
+            gameOver = false;
+            gameStarting = true;
+            countdown = 3;
+            lastCountdownTime = Date.now();
+            score = 0;
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            player.size = 20;
+            player.projectiles = [];
+            enemies = [];
+            drops = [];
+            requestAnimationFrame(update);
+        }
+
+        function checkCollision(obj1, obj2) {
+            const dx = obj1.x - obj2.x;
+            const dy = obj1.y - obj2.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance < (obj1.size + obj2.size) / 2;
+        }
+
+        function update() {
+            if (gameOver) {
+                // Update high score if current score is higher
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('highScore', highScore);
+                }
+
+                ctx.fillStyle = 'red';
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over! Score: ' + score, canvas.width/2, canvas.height/2);
+                
+                // Add high score to game over screen
+                ctx.font = '24px Arial';
+                ctx.fillText('High Score: ' + highScore, canvas.width/2, canvas.height/2 - 50);
+                ctx.fillText('Click anywhere to restart', canvas.width/2, canvas.height/2 + 50);
+                ctx.textAlign = 'left';
+                return;
+            }
+
+            if (gameStarting) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);  // Clear previous numbers
+                const currentTime = Date.now();
+                if (currentTime - lastCountdownTime >= 1000) {
+                    countdown--;
+                    lastCountdownTime = currentTime;
+                }
+
+                ctx.fillStyle = 'black';
+                ctx.font = '72px Arial';
+                ctx.textAlign = 'center';
+                
+                if (countdown > 0) {
+                    ctx.fillText(countdown, canvas.width/2, canvas.height/2);
+                } else if (countdown === 0) {
+                    ctx.fillText('GO!', canvas.width/2, canvas.height/2);
+                } else {
+                    gameStarting = false;
+                }
+                
+                ctx.textAlign = 'left';
+                requestAnimationFrame(update);
+                return;
+            }
+
+            if (player.size <= 8 && drops.length === 0 && player.projectiles.length === 0) {
+                gameOver = true;
+                return;
+            }
+
+            // Player movement
+            if (keys['w']) player.y -= player.speed;
+            if (keys['s']) player.y += player.speed;
+            if (keys['a']) player.x -= player.speed;
+            if (keys['d']) player.x += player.speed;
+
+            // Keep player in bounds
+            player.x = Math.max(player.size/2, Math.min(canvas.width - player.size/2, player.x));
+            player.y = Math.max(player.size/2, Math.min(canvas.height - player.size/2, player.y));
+
+            // Update projectiles
+            player.projectiles.forEach((proj, i) => {
+                proj.x += proj.dx;
+                proj.y += proj.dy;
+                
+                if (proj.x < 0 || proj.x > canvas.width || proj.y < 0 || proj.y > canvas.height) {
+                    player.projectiles.splice(i, 1);
+                }
+            });
+
+            // Update enemies
+            enemies.forEach((enemy, i) => {
+                const targetAngle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                let angleDiff = targetAngle - enemy.angle;
+                if (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                
+                if (Math.abs(angleDiff) > enemy.turnSpeed) {
+                    enemy.angle += Math.sign(angleDiff) * enemy.turnSpeed;
+                } else {
+                    enemy.angle = targetAngle;
+                }
+                
+                enemy.x += Math.cos(enemy.angle) * enemy.speed;
+                enemy.y += Math.sin(enemy.angle) * enemy.speed;
+
+                if (checkCollision(player, enemy)) {
+                    gameOver = true;
+                }
+
+                player.projectiles.forEach((proj, j) => {
+                    if (checkCollision(proj, enemy)) {
+                        drops.push({
+                            x: enemy.x,
+                            y: enemy.y,
+                            size: enemy.size / 2
+                        });
+                        
+                        enemies.splice(i, 1);
+                        player.projectiles.splice(j, 1);
+                        score++;
+                    }
+                });
+            });
+
+            // Check for drop collection
+            drops.forEach((drop, i) => {
+                if (checkCollision(player, drop)) {
+                    player.size += 12;
+                    drops.splice(i, 1);
+                }
+            });
+
+            // Spawn enemies periodically
+            if (Math.random() < 0.02) spawnEnemy();
+
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw player
+            ctx.beginPath();
+            ctx.fillStyle = 'blue';
+            ctx.arc(player.x, player.y, player.size/2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.closePath();
+
+            // Draw projectiles
+            ctx.fillStyle = 'cyan';
+            player.projectiles.forEach(proj => {
+                ctx.beginPath();
+                ctx.arc(proj.x, proj.y, proj.size/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+            });
+
+            // Draw enemies with direction indicator
+            ctx.fillStyle = 'red';
+            enemies.forEach(enemy => {
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.size/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+
+                ctx.beginPath();
+                ctx.strokeStyle = 'darkred';
+                ctx.lineWidth = 2;
+                ctx.moveTo(enemy.x, enemy.y);
+                ctx.lineTo(
+                    enemy.x + Math.cos(enemy.angle) * (enemy.size/2),
+                    enemy.y + Math.sin(enemy.angle) * (enemy.size/2)
+                );
+                ctx.stroke();
+                ctx.closePath();
+            });
+
+            // Draw drops
+            ctx.fillStyle = 'green';
+            drops.forEach(drop => {
+                ctx.beginPath();
+                ctx.arc(drop.x, drop.y, drop.size/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+            });
+
+            // Draw scores
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText('Score: ' + score, 10, 30);
+            
+            // Add high score
+            ctx.textAlign = 'right';
+            ctx.fillText('High Score: ' + highScore, canvas.width - 10, 30);
+            ctx.textAlign = 'left';
+        }
+
+        update();
+    </script>
+</body>
+</html> 
