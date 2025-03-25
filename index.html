@@ -126,9 +126,14 @@
         // Input handling
         const keys = {};
         document.addEventListener('keydown', e => {
-            // Prevent shift key from being registered
             if (e.key !== 'Shift') {
-                keys[e.key.toLowerCase()] = true;  // Convert to lowercase
+                keys[e.key.toLowerCase()] = true;
+                
+                // Handle space key for restart
+                if (e.code === 'Space' && gameOver) {
+                    resetGame();
+                    e.preventDefault(); // Prevent page scrolling
+                }
             }
         });
         document.addEventListener('keyup', e => {
@@ -137,9 +142,7 @@
             }
         });
         document.addEventListener('click', (e) => {
-            if (gameOver) {
-                resetGame();
-            } else if (!gameStarting) {
+            if (!gameStarting) {
                 shoot(e);
             }
         });
@@ -231,17 +234,31 @@
 
         function update() {
             if (gameOver) {
-                // Update session high score
+                // Update session high score immediately when game ends
                 if (score > sessionHighScore) {
                     sessionHighScore = score;
                 }
 
-                // Update leaderboard
-                leaderboard.push({ username: username, score: score });
-                leaderboard.sort((a, b) => b.score - a.score);
-                leaderboard = leaderboard.slice(0, 3); // Keep only top 3
+                // Get current leaderboard and add new score
+                let currentLeaderboard = JSON.parse(localStorage.getItem('leaderboard')) || [];
+                
+                // Check if this score should be added to leaderboard
+                let scoreExists = currentLeaderboard.some(entry => 
+                    entry.username === username && entry.score === score
+                );
+                
+                if (!scoreExists) {
+                    currentLeaderboard.push({ username: username, score: score });
+                }
+                
+                // Sort all scores and keep top 3
+                currentLeaderboard.sort((a, b) => b.score - a.score);
+                leaderboard = currentLeaderboard.slice(0, 3);
+                
+                // Save updated leaderboard
                 localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
 
+                // Game over display
                 ctx.fillStyle = 'red';
                 ctx.font = '48px Arial';
                 ctx.textAlign = 'center';
@@ -261,7 +278,7 @@
                     );
                 });
 
-                ctx.fillText('Click anywhere to restart', canvas.width/2, canvas.height/2 + 180);
+                ctx.fillText('Press SPACE to restart', canvas.width/2, canvas.height/2 + 180);
                 ctx.textAlign = 'left';
                 return;
             }
@@ -361,6 +378,11 @@
 
             // Spawn enemies periodically
             if (Math.random() < 0.02) spawnEnemy();
+
+            // Update session high score during gameplay if score exceeds it
+            if (score > sessionHighScore) {
+                sessionHighScore = score;
+            }
 
             draw();
             requestAnimationFrame(update);
