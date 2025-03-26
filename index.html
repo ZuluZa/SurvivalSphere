@@ -117,6 +117,13 @@
         const ENEMY_TURN_SPEED = 0.03;
         const SPEED_INCREASE_INTERVAL = 50;
 
+        // Update or add these constants at the top
+        const FPS = 60;
+        const FRAME_TIME = 1000 / FPS;
+
+        // Modify the update function to include frame limiting
+        let lastFrameTime = 0;
+
         // Player
         const player = {
             x: canvas.width / 2,
@@ -235,6 +242,7 @@
             player.projectiles = [];
             enemies = [];
             drops = [];
+            lastFrameTime = 0;
             requestAnimationFrame(update);
         }
 
@@ -254,6 +262,7 @@
             username = input.value.trim();
             document.getElementById('usernameModal').style.display = 'none';
             
+            lastFrameTime = 0;
             // Initialize game state
             lastCountdownTime = Date.now();
             gameOver = false;
@@ -277,7 +286,19 @@
             requestAnimationFrame(update);
         }
 
-        function update() {
+        function update(currentTime) {
+            // Calculate time since last frame
+            const deltaTime = currentTime - lastFrameTime;
+            
+            // If not enough time has passed, skip this frame
+            if (deltaTime < FRAME_TIME) {
+                requestAnimationFrame(update);
+                return;
+            }
+            
+            // Update last frame time
+            lastFrameTime = currentTime - (deltaTime % FRAME_TIME);
+
             if (gameOver) {
                 // Update session high score immediately when game ends
                 if (score > sessionHighScore) {
